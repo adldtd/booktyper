@@ -4,19 +4,6 @@ SendMode Input  ; Recommended for new scripts due to its superior speed and reli
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 
 
-;Represents the init variables a user is able to change in the settings GUI
-
-;Array Value 1: Location of variable in settings.ini
-;Array Value 2: Default variable in "bedrock" edition
-;Array Value 3: Default variable in "java" edition
-
-fluidvars := {"MAX_LINES": ["pagelines", 14, 14]
-			, "MAX_PAGES": ["bookpages", 50, 100]
-			, "FillLines": ["filllines", 0, 0]
-			, "SaveCurrentBookProgress": ["maintain", 0, 0]
-			, "PasteText": ["pastetext", 1, 1]}
-
-
 FilePath := "" ;Represents the text file to be read
 Version := "" ;Represents the version to work with
 MAX_PIXELS_PER_LINE := 114
@@ -31,19 +18,37 @@ PasteText := true ;If set to false, the letters will be typed one by one
 FileReady := true
 TextReady := false
 
+;Represents the init variables a user is able to change in the settings GUI
+
+;Array Value 1: Location of variable in settings.ini
+;Array Value 2: Default variable in "bedrock" edition
+;Array Value 3: Default variable in "java" edition
+
+;Reserved location name "REF" means the GUI variable is directly linked to another variable, listed next
+
+fluidvars := {"MAX_LINES": ["pagelines", 14, 14]
+			, "MAX_PAGES": ["bookpages", 50, 100]
+			, "FillLines": ["filllines", 0, 0]
+			, "SaveCurrentBookProgress": ["maintain", 0, 0]
+			, "PasteText": ["pastetext", 1, 1]
+			, "MAX_LINESData": ["REF", "MAX_LINES"]
+			, "MAX_PAGESData": ["REF", "MAX_PAGES"]}
+
 
 
 CustomIni(ByRef fluidvars) { ;Only called when custom settings are picked
 
 	For Option, Presets in fluidvars
 	{
-		IniLoc := Presets[1]
-		IniRead, %Option%, settings.ini, settings, %IniLoc%
-		%Option% += 0
+		if (Presets[1] != "REF") {
+			IniLoc := Presets[1]
+			IniRead, %Option%, settings.ini, settings, %IniLoc%
+			%Option% += 0
+		}
 	}
 }
 
-StartWrite(FilePath, Version) { ;Should only be called when hotkey is started; shadow save
+StartWrite(FilePath, Version) { ;Should only be called when hotkey is started; "shadow" save
 	
 	if (FilePath = "Select a file..." or FilePath = "") {
 		IniWrite, "", settings.ini, settings, filename
@@ -60,9 +65,11 @@ CustomWrite(fluidvars) { ;Should only be called when save is pressed on settings
 
 	For Option, Presets in fluidvars
 	{
-		OptionValue := %Option%
-		IniLoc := Presets[1]
-		IniWrite, %OptionValue%, settings.ini, settings, %IniLoc%
+		if (Presets[1] != "REF") {
+			OptionValue := %Option%
+			IniLoc := Presets[1]
+			IniWrite, %OptionValue%, settings.ini, settings, %IniLoc%
+		}
 	}
 }
 
@@ -162,7 +169,7 @@ Gui, Paster:Add, Text, X405 Y100 vTimesPasted, 0
 Gui, Paster:Add, Button, X20 Y130 vActiveReturn gActiveReturnCMD, Return
 
 
-UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete) {
+UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete) { ;Called once hotkey is finished typing
 
 	CurrentPage := (1 + PagesTyped)
 	CurrentLine := (1 + LinesTyped)
@@ -202,10 +209,7 @@ if (not TextReady) {
 }
 
 Gui, Presets:Show, W360 H300 Center
-;Gui, Customize:Show, W560 H300 Center
-;Gui, Paster:Show, W450 H170 Center
-return
-
+return ;Start the GUI
 
 PresetsGuiClose:
 ExitApp
@@ -253,7 +257,7 @@ if (A_GuiControl = "StartFileButton") { ;Read from file selected
 	catch e {
 		MsgBox, An error occured loading the file. Either the destination no longer exists, is inaccessible by the script, or cannot be loaded in memory.
 		
-		ErrorLevel = 0
+		ErrorLevel := 0
 		return
 	}
 	
@@ -274,20 +278,21 @@ return
 
 JavaCMD: ;********** Called when Java Edition radio button is clicked
 if (Version != "java") {
-	MAX_LINES := 14
-	MAX_PAGES := 100
-	FillLines := false ;Variables are NOT tied to their corresponding GUI elements; changing them will not automatically change the elements
-	SaveCurrentBookProgress := false
-	Version := "java"
-	
-	GuiControl, Customize:, MAX_LINES, 14
-	GuiControl, Customize:, MAX_PAGES, 100
-	GuiControl, Customize:, FillLines, 0
-	GuiControl, Customize:, SaveCurrentBookProgress, 0
-	GuiControl, Customize:, PasteText, 1
 
-	GuiControl, Customize:, MAX_LINESData, 14
-	GuiControl, Customize:, MAX_PAGESData, 100
+	for Options, Presets in fluidvars
+	{
+		if (Presets[1] != "REF") {
+			StandVal := Presets[3] ;Standard java value
+			%Options% := StandVal
+			GuiControl, Customize:, %Options%, %StandVal%
+		}
+		else {
+			StandVal := fluidvars[Presets[2]][3]
+			GuiControl, Customize:, %Options%, %StandVal%
+		}
+	}
+	Version := "java"
+
 	if (ChangesMade) {
 		GuiControl, Customize:Disable, SaveButton
 		ChangesMade := false
@@ -298,20 +303,21 @@ return
 
 BedrockCMD: ;********** Called when Bedrock Edition radio button is clicked
 if (Version != "bedrock") {
-	MAX_LINES := 14
-	MAX_PAGES := 50
-	FillLines := false
-	SaveCurrentBookProgress := false
-	Version := "bedrock"
 	
-	GuiControl, Customize:, MAX_LINES, 14
-	GuiControl, Customize:, MAX_PAGES, 50
-	GuiControl, Customize:, FillLines, 0
-	GuiControl, Customize:, SaveCurrentBookProgress, 0
-	GuiControl, Customize:, PasteText, 1
+	for Options, Presets in fluidvars
+	{
+		if (Presets[1] != "REF") {
+			StandVal := Presets[2] ;Standard bedrock value
+			%Options% := StandVal
+			GuiControl, Customize:, %Options%, %StandVal%
+		}
+		else {
+			StandVal := fluidvars[Presets[2]][2]
+			GuiControl, Customize:, %Options%, %StandVal%
+		}
+	}
+	Version := "bedrock"
 
-	GuiControl, Customize:, MAX_LINESData, 14
-	GuiControl, Customize:, MAX_PAGESData, 50
 	if (ChangesMade) {
 		GuiControl, Customize:Disable, SaveButton
 		ChangesMade := false
@@ -322,17 +328,22 @@ return
 
 CustomizeCMD: ;********** Called when Custom Settings radio button is clicked
 if (Version != "custom") {
-	CustomIni(fluidvars)
-	Version := "custom"
 	
-	GuiControl, Customize:, MAX_LINES, %MAX_LINES%
-	GuiControl, Customize:, MAX_PAGES, %MAX_PAGES%
-	GuiControl, Customize:, FillLines, %FillLines%
-	GuiControl, Customize:, SaveCurrentBookProgress, %SaveCurrentBookProgress%
-	GuiControl, Customize:, PasteText, %PasteText%
+	CustomIni(fluidvars)
+	for Options, Presets in fluidvars
+	{
+		if (Presets[1] != "REF") {
+			StandVal := %Options% ;Retrieves the value stored in the updated variable
+			GuiControl, Customize:, %Options%, %StandVal%
+		}
+		else {
+			StandVal := Presets[2] ;Due to this, all "REF"s should be placed before the "normal" variables
+			StandVal := %StandVal%
+			GuiControl, Customize:, %Options%, %StandVal%
+		}
+	}
+	Version := "custom"
 
-	GuiControl, Customize:, MAX_LINESData, %MAX_LINES%
-	GuiControl, Customize:, MAX_PAGESData, %MAX_PAGES%
 	if (ChangesMade) {
 		GuiControl, Customize:Disable, SaveButton
 		ChangesMade := false
