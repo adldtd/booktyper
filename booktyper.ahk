@@ -1,6 +1,6 @@
 ﻿#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
 ; #Warn  ; Enable warnings to assist with detecting common errors.
-SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
+SendMode Event
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 
 
@@ -415,8 +415,82 @@ return
 ^+b::
 
 BookEnded := false ;When the book ends, do not type the current word out
+clipboardMemory := clipboard
+clipboard := "" ;Utilized in pasting mode
+WaitVal := 30
 
 ;SPECIAL CHARACTERS: `n, space, paragraph sign and chars after it
+
+
+
+TextSendBookEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex) {
+	if (not PasteText) {
+		Loop, Parse, CurrentWord 
+		{
+			Send, %A_LoopField%
+		}
+	}
+	else {
+		clipboard := clipboard . CurrentWord
+		Sleep, %WaitVal%
+		Send, ^v
+		Sleep, %WaitVal%
+		clipboard := ""
+	}
+	WordStartIndex := StartIndex + 1
+}
+
+
+TextSendPageEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex) {
+	if (not PasteText) {
+		Loop, Parse, CurrentWord ;Clear text lines
+		{
+			Send, %A_LoopField%
+		}
+		Send, {PgDn}
+	}
+	else {
+		clipboard := clipboard . CurrentWord
+		Sleep, %WaitVal%
+		Send, ^v ;Paste
+		Send, {PgDn}
+		Sleep, %WaitVal%
+		clipboard := ""
+	}
+	WordStartIndex := StartIndex + 1
+}
+
+
+TextSendLineEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex) {
+	if (not PasteText) {
+		Loop, Parse, CurrentWord ;Send the word copied whenever there is a enter or space created
+		{
+			Send, %A_LoopField%
+		}
+		Send, {Enter}
+	}
+	else {
+		clipboard := clipboard . CurrentWord . "`n"
+	}
+	WordStartIndex := StartIndex + 1
+}
+
+
+TextSendStandard(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex) {
+	if (not PasteText) {
+		Loop, Parse, CurrentWord
+		{
+			Send, %A_LoopField%
+		}
+		Send, {Space}
+	}
+	else {
+		clipboard := clipboard . CurrentWord . " "
+	}
+	WordStartIndex := StartIndex + 1
+}
+
+
 
 ReadText := SubStr(InputFile, StartIndex)
 Loop, Parse, ReadText
@@ -440,11 +514,8 @@ Loop, Parse, ReadText
 				if ((PagesTyped + 1) = MAX_PAGES) { ;Book finished
 					
 					if (CurrentWordPixels = PixelsTyped or (CurrentWordPixels + Width) > MAX_PIXELS_PER_LINE or FillLines) { ;Deal with "text lines" first; ######## MAKE SURE TO SAVE THE LAST LETTER TYPED FOR ANOTHER BOOK
-						Loop, Parse, CurrentWord
-						{
-							Send, %A_LoopField%
-						}
-						WordStartIndex := StartIndex + 1
+						
+						TextSendBookEnd(CurrentWord, PasteText, WordStartIndex, StartIndex)
 						
 						if (A_LoopField = " " or A_LoopField = "`n") {
 							CurrentWord := ""
@@ -456,15 +527,20 @@ Loop, Parse, ReadText
 					else { ;Save current word if it can be typed in the next line
 					
 						if (A_LoopField = " " or A_LoopField = "`n") {
-							Loop, Parse, CurrentWord
-							{
-								Send, %A_LoopField%
-							}
-							WordStartIndex := StartIndex + 1
+							
+							TextSendBookEnd(CurrentWord, PasteText, WordStartIndex, StartIndex)
 							
 							CurrentWord := ""
 						}
 						else {
+							
+							if (PasteText) { ;If pasting mode is on, paste the current clipboard which does NOT contain the current word
+								Sleep, %WaitVal%
+								Send, ^v
+								Sleep, %WaitVal%
+								clipboard := ""
+							}
+
 							CurrentWord := CurrentWord . A_LoopField
 						}
 					}
@@ -476,13 +552,7 @@ Loop, Parse, ReadText
 					
 					if (CurrentWordPixels = PixelsTyped or (CurrentWordPixels + Width) > MAX_PIXELS_PER_LINE or FillLines) {
 						
-						Loop, Parse, CurrentWord ;Clear text line
-						{
-							Send, %A_LoopField%
-						}
-						WordStartIndex := StartIndex + 1
-						
-						Send, {PgDn} ;Brackets go around special key names
+						TextSendPageEnd(CurrentWord, PasteText, WordStartIndex, StartIndex)
 						
 						if (A_LoopField = " " or A_LoopField = "`n") {
 							
@@ -503,13 +573,7 @@ Loop, Parse, ReadText
 								
 						if (A_LoopField = " " or A_LoopField = "`n") {
 						
-							Loop, Parse, CurrentWord
-							{
-								Send, %A_LoopField%
-							}
-							WordStartIndex := StartIndex + 1
-						
-							Send, {PgDn}
+							TextSendPageEnd(CurrentWord, PasteText, WordStartIndex, StartIndex)
 							
 							CurrentWord := ""
 							CurrentWordPixels := 0
@@ -518,7 +582,16 @@ Loop, Parse, ReadText
 						}
 						else {
 							
-							Send, {PgDn}
+							if (PasteText) {
+								Sleep, %WaitVal%
+								Send, ^v
+								Send, {PgDn}
+								Sleep, %WaitVal%
+								clipboard := ""
+							}
+							else {
+								Send, {PgDn}
+							}
 							
 							CurrentWord := CurrentWord . A_LoopField
 							CurrentWordPixels += Width
@@ -535,13 +608,7 @@ Loop, Parse, ReadText
 				
 				if (CurrentWordPixels = PixelsTyped or (CurrentWordPixels + Width) > MAX_PIXELS_PER_LINE or FillLines) { ;Either not enough space on this line or the next for the word
 					
-					Loop, Parse, CurrentWord
-					{
-						Send, %A_LoopField%
-					}
-					WordStartIndex := StartIndex + 1
-					
-					Send, {Enter}
+					TextSendLineEnd(CurrentWord, PasteText, WordStartIndex, StartIndex)
 					
 					if (A_LoopField = " " or A_LoopField = "`n") {
 						
@@ -559,14 +626,8 @@ Loop, Parse, ReadText
 				else { ;Default
 					
 					if (A_LoopField = " " or A_LoopField = "`n") {
-					
-						Loop, Parse, CurrentWord ;Send the word copied whenever there is a enter or space created
-						{
-							Send, %A_LoopField%
-						}
-						WordStartIndex := StartIndex + 1
-					
-						Send, {Enter}
+
+						TextSendLineEnd(CurrentWord, PasteText, WordStartIndex, StartIndex)
 						
 						CurrentWord := ""
 						CurrentWordPixels := 0
@@ -574,7 +635,12 @@ Loop, Parse, ReadText
 					}
 					else {
 					
-						Send, {Enter}
+						if (not PasteText) {
+							Send, {Enter}
+						}
+						else {
+							clipboard := clipboard . "`n"
+						}
 						
 						CurrentWord := CurrentWord . A_LoopField
 						CurrentWordPixels += Width
@@ -590,14 +656,8 @@ Loop, Parse, ReadText
 		
 			if (A_LoopField = " ") { ;`n is not accounted for here, as it should be impossible that a newline does not finish the current line
 			
-				Loop, Parse, CurrentWord
-				{
-					Send, %A_LoopField%
-				}
-				WordStartIndex := StartIndex + 1
-				
-				Send, {Space}
-				
+				TextSendStandard(CurrentWord, PasteText, WordStartIndex, StartIndex)
+
 				CurrentWord := ""
 				CurrentWordPixels := 0
 			}
@@ -617,10 +677,21 @@ Loop, Parse, ReadText
 
 if (not BookEnded) {
 
-	Loop, Parse, CurrentWord
-	{
-		Send, %A_LoopField%
+	if (not PasteText) {
+		Loop, Parse, CurrentWord
+		{
+			Send, %A_LoopField%
+		}
 	}
+	else {
+		clipboard := clipboard . CurrentWord
+		Sleep, %WaitVal%
+		Send, ^v
+		Sleep, %WaitVal% ;############################ AUTOHOTKEY NEEDS TO WAIT A LITTLE BIT TO COMPLETELY PASTE
+		clipboard := ""
+	}
+
+	clipboard := clipboardMemory
 	
 	CurrentWord := "" ;Reset everything; this makes way for a completely new book ############# THIS SHOULD CHANGE IF CURRENT BOOK PROGRESS IS SAVED
 	CurrentWordPixels := 0
@@ -634,6 +705,8 @@ if (not BookEnded) {
 	WordStartIndex := 1
 }
 else { ;Keep track of the last word, but erase everything else
+
+	clipboard := clipboardMemory
 
 	PixelsTyped := 0
 	LinesTyped := 0
