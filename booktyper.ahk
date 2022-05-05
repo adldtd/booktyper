@@ -1,7 +1,8 @@
 ﻿#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
 ; #Warn  ; Enable warnings to assist with detecting common errors.
-SendMode Event
+SendMode Input
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
+FileEncoding, UTF-8
 
 
 FilePath := "" ;Represents the text file to be read
@@ -29,7 +30,7 @@ TextReady := false
 fluidvars := {"MAX_LINES": ["pagelines", 14, 14]
 			, "MAX_PAGES": ["bookpages", 50, 100]
 			, "FillLines": ["filllines", 0, 0]
-			, "SaveCurrentBookProgress": ["maintain", 0, 0]
+			, "SaveCurrentBookProgress": ["maintain", 0, 0] ;UNIMPLEMENTED
 			, "PasteText": ["pastetext", 1, 1]
 			, "MAX_LINESData": ["REF", "MAX_LINES"]
 			, "MAX_PAGESData": ["REF", "MAX_PAGES"]}
@@ -156,7 +157,8 @@ Gui, Paster:New, , BookTyper - Active
 Gui, Paster:Add, Text, X110 Y20, In Minecraft, paste text using CTRL + Shift + B.
 Gui, Paster:Add, Text, X25 Y40, To clear all the text from a book, go to the starting page and press CTRL + Shift + N.
 Gui, Paster:Add, Progress, X20 Y67 W370 H20 cBlue BackgroundCFCFCF vTypingCompletion, 0
-Gui, Paster:Add, Text, X400 Y70 vCompletionText, 0`%
+Gui, Paster:Add, Edit, X400 Y67 W35 H20 vCompletionText, 0`%
+GuiControl, Paster:Disable, CompletionText
 Gui, Paster:Add, Text, X20 Y100, Current Page:
 Gui, Paster:Add, Text, X95 Y100 vCurrentPage, 1 ;Program always starts typing at page 1, line 1
 Gui, Paster:Add, Text, X120 Y100, Current Line:
@@ -169,7 +171,7 @@ Gui, Paster:Add, Text, X405 Y100 vTimesPasted, 0
 Gui, Paster:Add, Button, X20 Y130 vActiveReturn gActiveReturnCMD, Return
 
 
-UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete) { ;Called once hotkey is finished typing
+UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, ByRef TimesPasted) { ;Called once hotkey is finished typing
 
 	CurrentPage := (1 + PagesTyped)
 	CurrentLine := (1 + LinesTyped)
@@ -414,10 +416,17 @@ return
 #IfWinExist BookTyper - Active
 ^+b::
 
+PreviousDelay := A_KeyDelay
 BookEnded := false ;When the book ends, do not type the current word out
 clipboardMemory := clipboard
 clipboard := "" ;Utilized in pasting mode
-WaitVal := 30
+WaitVal := 25 ;Milliseconds to wait before pressing the paste button
+Sleep, %WaitVal%
+
+if (PasteText) {
+	SendMode Event ;Pasting mode is less likely to bug out this way
+	SetKeyDelay, %WaitVal%
+}
 
 ;SPECIAL CHARACTERS: `n, space, paragraph sign and chars after it
 
@@ -699,7 +708,7 @@ if (not BookEnded) {
 	LinesTyped := 0
 	PagesTyped := 0
 	
-	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, 100)
+	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, 100, MAX_PIXELS_PER_LINE, TimedPasted)
 	
 	StartIndex := 1 ;Only reverts if the full text was typed
 	WordStartIndex := 1
@@ -718,8 +727,9 @@ else { ;Keep track of the last word, but erase everything else
 		WordStartIndex := 1
 	}
 	
-	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete)
+	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, TimesPasted)
 }
+SendMode Input
 return
 
 
