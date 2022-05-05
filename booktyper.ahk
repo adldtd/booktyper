@@ -1,7 +1,7 @@
 ﻿#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
 ; #Warn  ; Enable warnings to assist with detecting common errors.
 SendMode Input
-SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
+SetWorkingDir %A_ScriptDir%  ;Ensures a consistent starting directory.
 FileEncoding, UTF-8
 
 
