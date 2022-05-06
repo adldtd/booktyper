@@ -18,6 +18,8 @@ PasteText := true ;If set to false, the letters will be typed one by one
 
 FileReady := true
 TextReady := false
+FileActivated := false ;Whether the hotkey was previously activated, with the same file
+TextActivated := false ;If file activated is true, this should be false, and vice versa
 
 ;Represents the init variables a user is able to change in the settings GUI
 
@@ -111,6 +113,7 @@ LinesTyped := 0 ;Keeps track of how many total lines were filled, or to be fille
 PagesTyped := 0 ;How many pages in total were typed
 StartIndex := 1 ;Represents the beginning of the input file to begin pasting; changes from 0 if not everything fits into one book
 WordStartIndex := 1 ;Represents the beginning of a word
+TimesPasted := 0 ;Keeps track of the "iterations"
 
 
 
@@ -166,9 +169,10 @@ Gui, Paster:Add, Text, X190 Y100 vCurrentLine, 1
 Gui, Paster:Add, Text, X210 Y100, Pixels Left (on line):
 Gui, Paster:Add, Text, X310 Y100 vCurrentPixels, %MAX_PIXELS_PER_LINE% ;Should be 114 unless the user changes it
 Gui, Paster:Add, Text, X350 Y100, Iterations:
-TimesPasted := 0
 Gui, Paster:Add, Text, X405 Y100 vTimesPasted, 0
 Gui, Paster:Add, Button, X20 Y130 vActiveReturn gActiveReturnCMD, Return
+Gui, Paster:Add, Button, X85 Y130 vReset gResetCMD, Reset
+GuiControl, Paster:Disable, Reset ;Nothing to reset at the beginning
 
 
 UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, ByRef TimesPasted) { ;Called once hotkey is finished typing
@@ -186,8 +190,8 @@ UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS
 	
 	if (PercentageComplete = 100) {
 		TimesPasted += 1
-		GuiControl, Paster:, TimesPasted, %TimesPasted%
 	}
+	GuiControl, Paster:, TimesPasted, %TimesPasted%
 }
 
 
@@ -228,6 +232,12 @@ SelectButtonCMD: ;********** Called when file select button is clicked
 FileSelectFile, FilePath, 3, , , *.txt ;Only able to select text files that exist
 if (FilePath != "") {
 	GuiControl, Presets:, SelectText, %FilePath% ;Updates the text shown to the file path chosen
+
+	if (FileActivated) {
+		FileActivated := false ;Doesn't check whether the file is the same, as it could have been modified
+		gosub ResetCMD
+	}
+
 	if (not FileReady) {
 		FileReady := true
 		GuiControl, Presets:Enable, StartFileButton
@@ -249,9 +259,18 @@ else if (EnterField = "") {
 return
 
 
-StartButtonCMD: ;Begin the hotkey, using the text entered as input
+StartButtonCMD: ;Begin the hotkey
 Gui, Presets:Submit, NoHide
-if (A_GuiControl = "StartFileButton") { ;Read from file selected
+Gui, Customize:Submit, NoHide ;Use current customized settings, even if they weren't saved
+
+if (TextActivated) { ;InputFile is not empty; has the previously entered text
+	if (InputFile != EnterField) {
+		TextActivated := false
+		gosub ResetCMD
+	}
+}
+
+if (A_GuiControl = "StartFileButton" and (not FileActivated)) { ;Read from file selected
 	
 	try {
 		FileRead, InputFile, %FilePath%
@@ -267,9 +286,23 @@ if (A_GuiControl = "StartFileButton") { ;Read from file selected
 		MsgBox, Error: File given is empty.
 		return
 	}
+
+	if (TextActivated) { ;Switching from pasting the text field to pasting the file; assumed to be of different content
+		TextActivated := false
+		gosub ResetCMD
+	}
+
+	FileActivated := true
 }
-else { ;Read from text entered
+else if (A_GuiControl = "StartTextButton" and (not TextActivated)) { ;Read from text entered
 	InputFile := EnterField
+
+	if (FileActivated) {
+		FileActivated := false
+		gosub ResetCMD
+	}
+
+	TextActivated := true
 }
 
 StartWrite(FilePath, Version)
@@ -399,16 +432,23 @@ return
 
 
 
-ActiveReturnCMD: ;Return to general window from active mode
-CurrentWord := "" ;Reset everything
+ActiveReturnCMD: ;Return to general window from active mode; don't erase everything just yet
+Gui, Paster:Hide
+Gui, Presets:Show, W360 H300 Center
+return
+
+
+ResetCMD: ;Erase all "progress" made with the current file or text field; should only be called when either is made different by the user
+CurrentWord := ""
 CurrentWordPixels := 0
 PixelsTyped := 0
 LinesTyped := 0
 PagesTyped := 0
 StartIndex := 1
 WordStartIndex := 1
-Gui, Paster:Hide
-Gui, Presets:Show, W360 H300 Center
+TimesPasted := 0
+UpdateValues(0, 0, 0, 0, MAX_PIXELS_PER_LINE, 0)
+GuiControl, Paster:Disable, Reset ;Disable if pressed or if everything has already been reset
 return
 
 
@@ -690,7 +730,8 @@ if (not BookEnded) {
 	LinesTyped := 0
 	PagesTyped := 0
 	
-	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, 100, MAX_PIXELS_PER_LINE, TimedPasted)
+	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, 100, MAX_PIXELS_PER_LINE, TimesPasted)
+	GuiControl, Paster:Enable, Reset
 	
 	StartIndex := 1 ;Only reverts if the full text was typed
 	WordStartIndex := 1
@@ -710,6 +751,7 @@ else { ;Keep track of the last word, but erase everything else
 	}
 	
 	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, TimesPasted)
+	GuiControl, Paster:Enable, Reset
 }
 ;Send, {LControl up}{RControl up} ;Prevents weird control holding bug
 return
