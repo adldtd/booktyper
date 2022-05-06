@@ -416,17 +416,9 @@ return
 #IfWinExist BookTyper - Active
 ^+b::
 
-PreviousDelay := A_KeyDelay
 BookEnded := false ;When the book ends, do not type the current word out
-clipboardMemory := clipboard
+clipboardMemory := clipboard ;Remember what was placed in the clipboard
 clipboard := "" ;Utilized in pasting mode
-WaitVal := 25 ;Milliseconds to wait before pressing the paste button
-Sleep, %WaitVal%
-
-if (PasteText) {
-	SendMode Event ;Pasting mode is less likely to bug out this way
-	SetKeyDelay, %WaitVal%
-}
 
 ;SPECIAL CHARACTERS: `n, space, paragraph sign and chars after it
 
@@ -441,9 +433,7 @@ TextSendBookEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex) {
 	}
 	else {
 		clipboard := clipboard . CurrentWord
-		Sleep, %WaitVal%
-		Send, ^v
-		Sleep, %WaitVal%
+		SendInput, %clipboard%
 		clipboard := ""
 	}
 	WordStartIndex := StartIndex + 1
@@ -460,10 +450,8 @@ TextSendPageEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex) {
 	}
 	else {
 		clipboard := clipboard . CurrentWord
-		Sleep, %WaitVal%
-		Send, ^v ;Paste
+		SendInput, %clipboard% ;Paste
 		Send, {PgDn}
-		Sleep, %WaitVal%
 		clipboard := ""
 	}
 	WordStartIndex := StartIndex + 1
@@ -544,9 +532,7 @@ Loop, Parse, ReadText
 						else {
 							
 							if (PasteText) { ;If pasting mode is on, paste the current clipboard which does NOT contain the current word
-								Sleep, %WaitVal%
-								Send, ^v
-								Sleep, %WaitVal%
+								SendInput, %clipboard%
 								clipboard := ""
 							}
 
@@ -592,10 +578,8 @@ Loop, Parse, ReadText
 						else {
 							
 							if (PasteText) {
-								Sleep, %WaitVal%
-								Send, ^v
+								SendInput, %clipboard%
 								Send, {PgDn}
-								Sleep, %WaitVal%
 								clipboard := ""
 							}
 							else {
@@ -694,9 +678,7 @@ if (not BookEnded) {
 	}
 	else {
 		clipboard := clipboard . CurrentWord
-		Sleep, %WaitVal%
-		Send, ^v
-		Sleep, %WaitVal% ;############################ AUTOHOTKEY NEEDS TO WAIT A LITTLE BIT TO COMPLETELY PASTE
+		SendInput, %clipboard%
 		clipboard := ""
 	}
 
@@ -729,7 +711,7 @@ else { ;Keep track of the last word, but erase everything else
 	
 	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, TimesPasted)
 }
-SendMode Input
+;Send, {LControl up}{RControl up} ;Prevents weird control holding bug
 return
 
 
@@ -742,4 +724,5 @@ Loop, %MAX_PAGES%
 	Send, {Backspace}
 	Send, {PgDn}
 }
+;Send, {LControl up}{RControl up}
 return
