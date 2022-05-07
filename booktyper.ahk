@@ -13,8 +13,12 @@ MAX_PAGES := 100 ;100 pages per book in Java Edition
 InputFile := "" ;Represents the text the program is iterating through
 
 FillLines := false ;If set to true, the current word will be broken between lines/pages instead of saved
-SaveCurrentBookProgress := false ;If set to true, the pixels typed, lines typed, and pages typed will not be reset after the pasting is finished
 PasteText := true ;If set to false, the letters will be typed one by one
+NextBookGroup := 1
+NextPageGroup := 0
+NextLineGroup := 0
+NextSpaceGroup := 0
+NextCharGroup := 0
 
 FileReady := true
 TextReady := false
@@ -32,8 +36,12 @@ TextActivated := false ;If file activated is true, this should be false, and vic
 fluidvars := {"MAX_LINES": ["pagelines", 14, 14]
 			, "MAX_PAGES": ["bookpages", 50, 100]
 			, "FillLines": ["filllines", 0, 0]
-			, "SaveCurrentBookProgress": ["maintain", 0, 0] ;UNIMPLEMENTED
 			, "PasteText": ["pastetext", 1, 1]
+			, "NextBookGroup": ["nbook", 1, 1]
+			, "NextPageGroup": ["npage", 0, 0]
+			, "NextLineGroup": ["nline", 0, 0]
+			, "NextSpaceGroup": ["nspace", 0, 0]
+			, "NextCharGroup": ["nchar", 0, 0]
 			, "MAX_LINESData": ["REF", "MAX_LINES"]
 			, "MAX_PAGESData": ["REF", "MAX_PAGES"]}
 
@@ -144,11 +152,20 @@ Gui, Customize:Add, Text, X20 Y90 vPagesText, Pages per book:
 Gui, Customize:Add, Slider, X20 Y110 Center Range1-100 TickInterval50 AltSubmit gSliderCMD vMAX_PAGES, %MAX_PAGES%
 Gui, Customize:Add, Edit, X150 Y120 W35 vMAX_PAGESData, %MAX_PAGES%
 GuiControl, Customize:Disable, MAX_PAGESData
-Gui, Customize:Add, CheckBox, X20 Y170 vSaveCurrentBookProgress gUpdateCMD, Maintain current book progress
-GuiControl, Customize:, SaveCurrentBookProgress, %SaveCurrentBookProgress%
-Gui, Customize:Add, CheckBox, X20 Y195 vFillLines gUpdateCMD, Always fill lines
+Gui, Customize:Add, Text, X220 Y20, When done pasting, go to:
+Gui, Customize:Add, Radio, X220 Y50 vNextBookGroup gUpdateCMD, Next Book ;This solution sacrifices streamlining to fit nicely into fluidvars
+Gui, Customize:Add, Radio, X220 Y75 vNextPageGroup gUpdateCMD, Next Page
+Gui, Customize:Add, Radio, X220 Y100 vNextLineGroup gUpdateCMD, Next Line
+Gui, Customize:Add, Radio, X220 Y125 vNextSpaceGroup gUpdateCMD, Next Space
+Gui, Customize:Add, Radio, X220 Y150 vNextCharGroup gUpdateCMD, Next Character
+GuiControl, Customize:, NextBookGroup, %NextBookGroup%
+GuiControl, Customize:, NextPageGroup, %NextPageGroup%
+GuiControl, Customize:, NextLineGroup, %NextLineGroup%
+GuiControl, Customize:, NextSpaceGroup, %NextSpaceGroup%
+GuiControl, Customize:, NextCharGroup, %NextCharGroup%
+Gui, Customize:Add, CheckBox, X20 Y170 vFillLines gUpdateCMD, Always fill lines
 GuiControl, Customize:, FillLines, %FillLines%
-Gui, Customize:Add, CheckBox, X20 Y220 vPasteText gUpdateCMD, Copy text to clipboard and paste (disabling makes it slower)
+Gui, Customize:Add, CheckBox, X20 Y195 vPasteText gUpdateCMD, Copy text to clipboard and paste (disabling makes it slower)
 GuiControl, Customize:, PasteText, %PasteText%
 Gui, Customize:Add, Button, X20 Y255 vSaveButton gSaveCMD, Save
 GuiControl, Customize:Disable, SaveButton
@@ -163,13 +180,17 @@ Gui, Paster:Add, Progress, X20 Y67 W370 H20 cBlue BackgroundCFCFCF vTypingComple
 Gui, Paster:Add, Edit, X400 Y67 W35 H20 vCompletionText, 0`%
 GuiControl, Paster:Disable, CompletionText
 Gui, Paster:Add, Text, X20 Y100, Current Page:
-Gui, Paster:Add, Text, X95 Y100 vCurrentPage, 1 ;Program always starts typing at page 1, line 1
+Gui, Paster:Add, Edit, X90 Y98 W23 vCurrentPage, 1 ;Program always starts typing at page 1, line 1
+GuiControl, Paster:Disable, CurrentPage
 Gui, Paster:Add, Text, X120 Y100, Current Line:
-Gui, Paster:Add, Text, X190 Y100 vCurrentLine, 1
-Gui, Paster:Add, Text, X210 Y100, Pixels Left (on line):
-Gui, Paster:Add, Text, X310 Y100 vCurrentPixels, %MAX_PIXELS_PER_LINE% ;Should be 114 unless the user changes it
+Gui, Paster:Add, Edit, X185 Y98 W23 vCurrentLine, 1
+GuiControl, Paster:Disable, CurrentLine
+Gui, Paster:Add, Text, X214 Y100, Pixels Left (on line):
+Gui, Paster:Add, Edit, X312 Y98 W30 vCurrentPixels, %MAX_PIXELS_PER_LINE% ;Should be 114 unless the user changes it
+GuiControl, Paster:Disable, CurrentPixels
 Gui, Paster:Add, Text, X350 Y100, Iterations:
-Gui, Paster:Add, Text, X405 Y100 vTimesPasted, 0
+Gui, Paster:Add, Edit, X400 Y98 W23 vTimesPasted, 0
+GuiControl, Paster:Disable, TimesPasted
 Gui, Paster:Add, Button, X20 Y130 vActiveReturn gActiveReturnCMD, Return
 Gui, Paster:Add, Button, X85 Y130 vReset gResetCMD, Reset
 GuiControl, Paster:Disable, Reset ;Nothing to reset at the beginning
@@ -529,7 +550,13 @@ TextSendStandard(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex) {
 
 
 
-ReadText := SubStr(InputFile, StartIndex)
+if (NextLineGroup)
+	ReadText := SubStr(InputFile, StartIndex) . "`n"
+else if (NextSpaceGroup)
+	ReadText := SubStr(InputFile, StartIndex) . " "
+else
+	ReadText := SubStr(InputFile, StartIndex)
+
 Loop, Parse, ReadText
 {
 	if (Values.HasKey(Ord(A_LoopField))) { ;Character is accounted for
@@ -724,11 +751,20 @@ if (not BookEnded) {
 
 	clipboard := clipboardMemory
 	
-	CurrentWord := "" ;Reset everything; this makes way for a completely new book ############# THIS SHOULD CHANGE IF CURRENT BOOK PROGRESS IS SAVED
+	CurrentWord := ""
 	CurrentWordPixels := 0
-	PixelsTyped := 0
-	LinesTyped := 0
-	PagesTyped := 0
+
+	;Only one of the "group" variables are true at a time
+	if (NextBookGroup or (NextPageGroup and (PagesTyped + 1 = MAX_PAGES))) { ;Either go to the next book, or out of pages
+		PixelsTyped := 0
+		LinesTyped := 0
+		PagesTyped := 0
+	} else if (NextPageGroup) { ;Enough pages to "flip"
+		Send, {PgDn}
+		PixelsTyped := 0
+		LinesTyped := 0
+		PagesTyped += 1
+	} ;else if (NextLineGroup or NextSpaceGroup or NextCharGroup) ;Nothing needs to be done
 	
 	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, 100, MAX_PIXELS_PER_LINE, TimesPasted)
 	GuiControl, Paster:Enable, Reset
@@ -754,6 +790,7 @@ else { ;Keep track of the last word, but erase everything else
 	GuiControl, Paster:Enable, Reset
 }
 ;Send, {LControl up}{RControl up} ;Prevents weird control holding bug
+SoundPlay, *-1
 return
 
 
