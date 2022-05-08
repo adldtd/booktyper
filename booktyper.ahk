@@ -752,7 +752,9 @@ if (not BookEnded) {
 	clipboard := clipboardMemory
 	
 	CurrentWord := ""
-	CurrentWordPixels := 0
+
+	if (not (NextCharGroup and CurrentWordPixels = PixelsTyped))
+		CurrentWordPixels := 0 ;If the user keeps pasting, the script will allow word splices, even if they are split between "pastes"
 
 	;Only one of the "group" variables are true at a time
 	if (NextBookGroup or (NextPageGroup and (PagesTyped + 1 = MAX_PAGES))) { ;Either go to the next book, or out of pages
