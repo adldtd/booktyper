@@ -122,6 +122,9 @@ PagesTyped := 0 ;How many pages in total were typed
 StartIndex := 1 ;Represents the beginning of the input file to begin pasting; changes from 0 if not everything fits into one book
 WordStartIndex := 1 ;Represents the beginning of a word
 TimesPasted := 0 ;Keeps track of the "iterations"
+Steps := 0 ;Keeps track of how many times the paste button has been hit while the entire text has not been pasted
+PastStack := Array() ;Represents the "past" pastes; allows a user to go back a step
+FutureStack := Array() ;Stores pastes as user goes back steps; allows them to go forward once again
 
 
 
@@ -191,12 +194,19 @@ GuiControl, Paster:Disable, CurrentPixels
 Gui, Paster:Add, Text, X350 Y100, Iterations:
 Gui, Paster:Add, Edit, X400 Y98 W23 vTimesPasted, 0
 GuiControl, Paster:Disable, TimesPasted
+Gui, Paster:Add, Text, X370 Y135, Step:
+Gui, Paster:Add, Edit, X400 Y133 W23 vSteps, 0
+GuiControl, Paster:Disable, Steps
+Gui, Paster:Add, Button, X200 Y130 vStepBack gStepBackCMD, Step Back
+GuiControl, Paster:Disable, StepBack ;Nothing has been pasted yet
+Gui, Paster:Add, Button, X280 Y130 vStepForward gStepForwardCMD, Step Forward
+GuiControl, Paster:Disable, StepForward
 Gui, Paster:Add, Button, X20 Y130 vActiveReturn gActiveReturnCMD, Return
-Gui, Paster:Add, Button, X85 Y130 vReset gResetCMD, Reset
+Gui, Paster:Add, Button, X82 Y130 vReset gResetCMD, Reset
 GuiControl, Paster:Disable, Reset ;Nothing to reset at the beginning
 
 
-UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, ByRef TimesPasted) { ;Called once hotkey is finished typing
+UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, ByRef TimesPasted, ByRef Steps) { ;Called once hotkey is finished typing
 
 	CurrentPage := (1 + PagesTyped)
 	CurrentLine := (1 + LinesTyped)
@@ -209,10 +219,11 @@ UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS
 	GuiControl, Paster:, TypingCompletion, %PercentageComplete%
 	GuiControl, Paster:, CompletionText, %PercentageComplete%`%
 	
-	if (PercentageComplete = 100) {
+	if (PercentageComplete = 100)
 		TimesPasted += 1
-	}
 	GuiControl, Paster:, TimesPasted, %TimesPasted%
+	Steps += 1
+	GuiControl, Paster:, Steps, %Steps%
 }
 
 
@@ -468,8 +479,62 @@ PagesTyped := 0
 StartIndex := 1
 WordStartIndex := 1
 TimesPasted := 0
-UpdateValues(0, 0, 0, 0, MAX_PIXELS_PER_LINE, 0)
+Steps := 0
+PastStack := Array()
+PastStack.Push([CurrentWord, CurrentWordPixels, StartIndex, WordStartIndex, 0, PixelsTyped, LinesTyped, PagesTyped])
+FutureStack := Array()
+UpdateValues(0, 0, 0, 0, MAX_PIXELS_PER_LINE, 0, -1)
 GuiControl, Paster:Disable, Reset ;Disable if pressed or if everything has already been reset
+GuiControl, Paster:Disable, StepBack ;Should not be available if there is no "memory"
+GuiControl, Paster:Disable, StepForward
+return
+
+
+;([CurrentWord, CurrentWordPixels, StartIndex, WordStartIndex, 100, PixelsTyped, LinesTyped, PagesTyped])
+StepBackCMD:
+;Past stack contains the present situation at the top, but we want to go back from that
+FutureStack.Push(PastStack.Pop()) ;This subroutine should not be callable if past stack is only of length 1
+
+PData := PastStack[PastStack.Length()]
+CurrentWord := PData[1]
+CurrentWordPixels := PData[2]
+StartIndex := PData[3]
+WordStartIndex := PData[4]
+PercentageComplete := PData[5]
+PixelsTyped := PData[6]
+LinesTyped := PData[7]
+PagesTyped := PData[8]
+
+if (PercentageComplete = 100)
+	TimesPasted -= 1
+Steps -= 2
+UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, TimesPasted, Steps)
+if (PastStack.Length() = 1)
+	GuiControl, Paster:Disable, StepBack
+GuiControl, Paster:Enable, StepForward
+return
+
+
+StepForwardCMD:
+;Future stack always contains the future we want at the top
+FData := FutureStack.Pop() ;Again, this routine should not be callable if future stack is empty
+
+CurrentWord := FData[1]
+CurrentWordPixels := FData[2]
+StartIndex := FData[3]
+WordStartIndex := FData[4]
+PercentageComplete := FData[5]
+PixelsTyped := FData[6]
+LinesTyped := FData[7]
+PagesTyped := FData[8]
+
+if (PercentageComplete = 100)
+	TimesPasted -= 1
+UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, TimesPasted, Steps)
+PastStack.Push(FData)
+GuiControl, Paster:Enable, StepBack
+if (FutureStack.Length() = 0)
+	GuiControl, Paster:Disable, StepForward
 return
 
 
@@ -735,6 +800,15 @@ Loop, Parse, ReadText
 	StartIndex += 1
 }
 
+if (PastStack.Length() != 0) {
+	if (PastStack[PastStack.Length()][5] = 100) { ;At this point, steps should have been set to 0, and are about to be set to 1
+		PrevPData := PastStack.Pop()
+		PastStack := Array() ;The size of past stack should correspond with the value of steps
+		PastStack.Push(PrevPData)
+		Steps := 0
+	}
+}
+
 if (not BookEnded) {
 
 	if (not PasteText) {
@@ -768,11 +842,17 @@ if (not BookEnded) {
 		PagesTyped += 1
 	} ;else if (NextLineGroup or NextSpaceGroup or NextCharGroup) ;Nothing needs to be done
 	
-	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, 100, MAX_PIXELS_PER_LINE, TimesPasted)
+	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, 100, MAX_PIXELS_PER_LINE, TimesPasted, Steps)
 	GuiControl, Paster:Enable, Reset
-	
+
 	StartIndex := 1 ;Only reverts if the full text was typed
 	WordStartIndex := 1
+
+	;The script's "memory"
+	PastStack.Push([CurrentWord, CurrentWordPixels, StartIndex, WordStartIndex, 100, PixelsTyped, LinesTyped, PagesTyped])
+	FutureStack := Array() ;Always erase after a paste
+	GuiControl, Paster:Enable, StepBack ;When past stack is not a length of 1, this should be available
+	GuiControl, Paster:Disable, StepForward ;When future stack is empty, this should not be available
 }
 else { ;Keep track of the last word, but erase everything else
 
@@ -783,13 +863,18 @@ else { ;Keep track of the last word, but erase everything else
 	PagesTyped := 0
 	
 	PercentageComplete := Floor(((WordStartIndex - 1) / StrLen(InputFile)) * 100) ;Not ALWAYS 100% if book ended
-	if (PercentTyped = 100) { ;Book did end, BUT the full text was typed
+	if (PercentageComplete = 100) { ;Book did end, BUT the full text was typed
 		StartIndex := 1
 		WordStartIndex := 1
 	}
 	
-	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, TimesPasted)
+	UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS_PER_LINE, TimesPasted, Steps)
 	GuiControl, Paster:Enable, Reset
+
+	PastStack.Push([CurrentWord, CurrentWordPixels, StartIndex, WordStartIndex, PercentageComplete, PixelsTyped, LinesTyped, PagesTyped])
+	FutureStack := Array()
+	GuiControl, Paster:Enable, StepBack
+	GuiControl, Paster:Disable, StepForward
 }
 ;Send, {LControl up}{RControl up} ;Prevents weird control holding bug
 SoundPlay, *-1
