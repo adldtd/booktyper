@@ -124,6 +124,7 @@ WordStartIndex := 1 ;Represents the beginning of a word
 TimesPasted := 0 ;Keeps track of the "iterations"
 Steps := 0 ;Keeps track of how many times the paste button has been hit while the entire text has not been pasted
 PastStack := Array() ;Represents the "past" pastes; allows a user to go back a step
+PastStack.Push([CurrentWord, CurrentWordPixels, StartIndex, WordStartIndex, 0, PixelsTyped, LinesTyped, PagesTyped])
 FutureStack := Array() ;Stores pastes as user goes back steps; allows them to go forward once again
 
 
