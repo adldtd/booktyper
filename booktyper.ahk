@@ -6,7 +6,8 @@ FileEncoding, UTF-8
 
 
 FilePath := "" ;Represents the text file to be read
-Version := "" ;Represents the version to work with
+Version := "java" ;Represents the version to work with; ranges from java to bedrock; automatically java
+CustomMode := false ;Automatically loads in "default" mode
 MAX_PIXELS_PER_LINE := 114
 MAX_LINES := 14
 MAX_PAGES := 100 ;100 pages per book in Java Edition
@@ -45,15 +46,18 @@ fluidvars := {"MAX_LINES": ["pagelines", 14, 14]
 			, "MAX_LINESData": ["REF", "MAX_LINES"]
 			, "MAX_PAGESData": ["REF", "MAX_PAGES"]}
 
+;ini file is divided up into three sections: "file," which stores the filename and version, and "java" and
+;"bedrock," which store their own fluidvars
 
 
-CustomIni(ByRef fluidvars) { ;Only called when custom settings are picked
+
+CustomIni(ByRef fluidvars, Version) { ;Only called when load in custom settings is pressed
 
 	For Option, Presets in fluidvars
 	{
 		if (Presets[1] != "REF") {
 			IniLoc := Presets[1]
-			IniRead, %Option%, settings.ini, settings, %IniLoc%
+			IniRead, %Option%, settings.ini, %Version%, %IniLoc% ;The ini file saves options for both java and bedrock
 			%Option% += 0
 		}
 	}
@@ -62,42 +66,37 @@ CustomIni(ByRef fluidvars) { ;Only called when custom settings are picked
 StartWrite(FilePath, Version) { ;Should only be called when hotkey is started; "shadow" save
 	
 	if (FilePath = "Select a file..." or FilePath = "") {
-		IniWrite, "", settings.ini, settings, filename
+		IniWrite, "", settings.ini, file, filename
 	}
 	else {
-		IniWrite, %FilePath%, settings.ini, settings, filename
+		IniWrite, %FilePath%, settings.ini, file, filename
 	}
-	IniWrite, %Version%, settings.ini, settings, version
+	IniWrite, %Version%, settings.ini, file, version
 }
 
-CustomWrite(fluidvars) { ;Should only be called when save is pressed on settings
-
-	IniWrite, custom, settings.ini, settings, version
+CustomWrite(fluidvars, Version) { ;Should only be called when save is pressed on settings
 
 	For Option, Presets in fluidvars
 	{
 		if (Presets[1] != "REF") {
 			OptionValue := %Option%
 			IniLoc := Presets[1]
-			IniWrite, %OptionValue%, settings.ini, settings, %IniLoc%
+			IniWrite, %OptionValue%, settings.ini, %Version%, %IniLoc%
 		}
 	}
 }
 
 
 
-IniRead, FilePath, settings.ini, settings, filename
+IniRead, FilePath, settings.ini, file, filename
 if (FilePath = "ERROR" or FilePath = "") {
 	FilePath := "Select a file..."
 	FileReady := false
 }
 
-IniRead, Version, settings.ini, settings, version
+IniRead, Version, settings.ini, file, version
 if (Version = "bedrock") {
 	MAX_PAGES := 50
-}
-else if (Version = "custom") {
-	CustomIni(fluidvars)
 }
 else {
 	Version := "java" ;Default version of minecraft
@@ -129,6 +128,9 @@ FutureStack := Array() ;Stores pastes as user goes back steps; allows them to go
 
 
 
+PresetsWidth := "W360"
+PresetsHeight := "H300"
+
 Gui, Presets:New, , BookTyper
 Gui, Presets:Add, Text, X120 Y10 vTopText, Select a text file to paste:
 Gui, Presets:Add, Edit, X20 Y40 W285 vSelectText, %FilePath%
@@ -139,12 +141,14 @@ Gui, Presets:Add, Edit, X20 Y110 W320 H100 vEnterField gEnterFieldCMD,
 Gui, Presets:Add, Button, X20 Y260 gStartButtonCMD vStartTextButton, Begin With Text
 Gui, Presets:Add, Button, X150 Y260 gStartButtonCMD vStartFileButton, Begin With File
 Gui, Presets:Add, Button, X271 Y260 vSettingsButton gSettingsButtonCMD, Customize...
-Gui, Presets:Add, Radio, X20 Y230 vVersionsGroup gJavaCMD, Java Edition
-Gui, Presets:Add, Radio, X120 Y230 gBedrockCMD, Bedrock Edition
-Gui, Presets:Add, Radio, X240 Y230 gCustomizeCMD, Custom Settings
+Gui, Presets:Add, Radio, X70 Y230 vVersionsGroup gJavaCMD, Java Edition
+Gui, Presets:Add, Radio, X200 Y230 gBedrockCMD, Bedrock Edition
+;Gui, Presets:Add, CheckBox, X240 Y230 gCustomizeCMD, Custom Settings
 
 
 
+CustomizeWidth := "W560"
+CustomizeHeight := "H300"
 ChangesMade := false ;Variable to keep track of when the user is allowed to press save
 
 Gui, Customize:New, , Options
@@ -171,11 +175,17 @@ Gui, Customize:Add, CheckBox, X20 Y170 vFillLines gUpdateCMD, Always fill lines
 GuiControl, Customize:, FillLines, %FillLines%
 Gui, Customize:Add, CheckBox, X20 Y195 vPasteText gUpdateCMD, Copy text to clipboard and paste (disabling makes it slower)
 GuiControl, Customize:, PasteText, %PasteText%
-Gui, Customize:Add, Button, X20 Y255 vSaveButton gSaveCMD, Save
+Gui, Customize:Add, Button, X20 Y255 vCustReturn gCustReturnCMD, Return
+Gui, Customize:Add, Button, X80 Y255 vSaveButton gSaveCMD, Save
 GuiControl, Customize:Disable, SaveButton
-Gui, Customize:Add, Button, X70 Y255 vCustReturn gCustReturnCMD, Return
+Gui, Customize:Add, Button, X133 Y255 vLoadButton gLoadCMD, Load
+Gui, Customize:Add, Button, X185 Y255 vDefaultButton gDefaultCMD, Revert to Defaults
+GuiControl, Customize:Disable, DefaultButton
 
 
+
+PasterWidth := "W450"
+PasterHeight := "H170"
 
 Gui, Paster:New, , BookTyper - Active
 Gui, Paster:Add, Text, X110 Y20, In Minecraft, paste text using CTRL + Shift + B.
@@ -231,12 +241,8 @@ UpdateValues(PixelsTyped, LinesTyped, PagesTyped, PercentageComplete, MAX_PIXELS
 
 if (Version = "java") {
 	GuiControl, Presets:, Java Edition, 1
-}
-else if (Version = "bedrock") {
+} else {
 	GuiControl, Presets:, Bedrock Edition, 1
-}
-else {
-	GuiControl, Presets:, Custom Settings, 1
 }
 
 if (not FileReady) {
@@ -247,7 +253,7 @@ if (not TextReady) {
 	GuiControl, Presets:Disable, StartTextButton
 }
 
-Gui, Presets:Show, W360 H300 Center
+Gui, Presets:Show, %PresetsWidth% %PresetsHeight% Center
 return ;Start the GUI
 
 PresetsGuiClose:
@@ -340,7 +346,7 @@ else if (A_GuiControl = "StartTextButton" and (not TextActivated)) { ;Read from 
 
 StartWrite(FilePath, Version)
 Gui, Presets:Hide
-Gui, Paster:Show, W450 H170 Center
+Gui, Paster:Show, %PasterWidth% %PasterHeight% Center
 return
 
 
@@ -365,12 +371,17 @@ if (Version != "java") {
 		GuiControl, Customize:Disable, SaveButton
 		ChangesMade := false
 	}
+
+	if (CustomMode) {
+		GuiControl, Customize:Disable, DefaultButton
+		CustomMode := false
+	}
 }
 return
 
 
 BedrockCMD: ;********** Called when Bedrock Edition radio button is clicked
-if (Version != "bedrock") {
+if (Version != "bedrock") { ;************FOR BEDROCK PASTING, PRESS ESC, RIGHT ARROW KEY, THEN EITHER ENTER OR KEEP TYPING
 	
 	for Options, Presets in fluidvars
 	{
@@ -390,31 +401,10 @@ if (Version != "bedrock") {
 		GuiControl, Customize:Disable, SaveButton
 		ChangesMade := false
 	}
-}
-return
-
-
-CustomizeCMD: ;********** Called when Custom Settings radio button is clicked
-if (Version != "custom") {
 	
-	CustomIni(fluidvars)
-	for Options, Presets in fluidvars
-	{
-		if (Presets[1] != "REF") {
-			StandVal := %Options% ;Retrieves the value stored in the updated variable
-			GuiControl, Customize:, %Options%, %StandVal%
-		}
-		else {
-			StandVal := Presets[2] ;Due to this, all "REF"s should be placed before the "normal" variables
-			StandVal := %StandVal%
-			GuiControl, Customize:, %Options%, %StandVal%
-		}
-	}
-	Version := "custom"
-
-	if (ChangesMade) {
-		GuiControl, Customize:Disable, SaveButton
-		ChangesMade := false
+	if (CustomMode) {
+		GuiControl, Customize:Disable, DefaultButton
+		CustomMode := false
 	}
 }
 return
@@ -422,16 +412,53 @@ return
 
 SettingsButtonCMD: ;Switch to settings window
 Gui, Presets:Hide
-Gui, Customize:Show, W560 H300 Center
+Gui, Customize:Show, %CustomizeWidth% %CustomizeHeight% Center
 return
 
 
 
 SaveCMD:
 Gui, Customize:Submit, NoHide
-CustomWrite(fluidvars)
+CustomWrite(fluidvars, Version)
 GuiControl, Customize:Disable, SaveButton
 ChangesMade := false
+return
+
+
+LoadCMD: ;********** Called when load button is clicked
+CustomIni(fluidvars, Version)
+for Options, Presets in fluidvars
+{
+	if (Presets[1] != "REF") {
+		StandVal := %Options% ;Retrieves the value stored in the updated variable
+		GuiControl, Customize:, %Options%, %StandVal%
+	}
+	else {
+		StandVal := Presets[2] ;Due to this, all "REF"s should be placed before the "normal" variables
+		StandVal := %StandVal%
+		GuiControl, Customize:, %Options%, %StandVal%
+	}
+}
+CustomMode := true
+GuiControl, Customize:Enable, DefaultButton
+
+if (ChangesMade) {
+	GuiControl, Customize:Disable, SaveButton
+	ChangesMade := false
+}
+return
+
+
+DefaultCMD: ;********** Called when revert to defaults button is clicked
+if (Version = "java") {
+	Version := ""
+	gosub JavaCMD ;Cheaty way to revert variables
+}
+else {
+	Version := ""
+	gosub BedrockCMD
+}
+;GuiControl, Customize:Disable, DefaultButton ;Should have already been called by either java or bedrock cmd
 return
 
 
@@ -451,23 +478,23 @@ if (not ChangesMade) {
 	ChangesMade := true
 }
 
-if (Version != "custom") { ;Update version; now that user is customizing the settings it should be set to custom
-	Version := "custom"
-	GuiControl, Presets:, Custom Settings, 1
+if (not CustomMode) {
+	CustomMode := true
+	GuiControl, Customize:Enable, DefaultButton
 }
 return
 
 
 CustReturnCMD: ;Return to general window from settings
 Gui, Customize:Hide
-Gui, Presets:Show, W360 H300 Center
+Gui, Presets:Show, %PresetsWidth% %PresetsHeight% Center
 return
 
 
 
 ActiveReturnCMD: ;Return to general window from active mode; don't erase everything just yet
 Gui, Paster:Hide
-Gui, Presets:Show, W360 H300 Center
+Gui, Presets:Show, %PresetsWidth% %PresetsHeight% Center
 return
 
 
@@ -567,18 +594,33 @@ TextSendBookEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex) {
 }
 
 
-TextSendPageEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex) {
+PageFlip(Version, PagesTyped) { ;Java and Bedrock differ in the keys they use to flip pages
+
+	if (Version = "java") ;Simpler page turn
+		Send, {PgDn}
+	else { ;Bedrock turning
+		Send, {Esc}
+		Send, {Right}
+		if (Mod(PagesTyped, 2) = 1) { ;On an even numbered page; "flip" the two pages
+			Send, {Enter}
+			Send, {Left 2} ;Move to the previous of the next two pages
+		}
+	}
+}
+
+
+TextSendPageEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex, Version) {
 	if (not PasteText) {
 		Loop, Parse, CurrentWord ;Clear text lines
 		{
 			Send, %A_LoopField%
 		}
-		Send, {PgDn}
+		PageFlip(Version, PagesTyped)
 	}
 	else {
 		clipboard := clipboard . CurrentWord
 		SendInput, %clipboard% ;Paste
-		Send, {PgDn}
+		PageFlip(Version, PagesTyped)
 		clipboard := ""
 	}
 	WordStartIndex := StartIndex + 1
@@ -680,7 +722,7 @@ Loop, Parse, ReadText
 					
 					if (CurrentWordPixels = PixelsTyped or (CurrentWordPixels + Width) > MAX_PIXELS_PER_LINE or FillLines) {
 						
-						TextSendPageEnd(CurrentWord, PasteText, WordStartIndex, StartIndex)
+						TextSendPageEnd(CurrentWord, PasteText, WordStartIndex, StartIndex, Version)
 						
 						if (A_LoopField = " " or A_LoopField = "`n") {
 							
@@ -701,7 +743,7 @@ Loop, Parse, ReadText
 								
 						if (A_LoopField = " " or A_LoopField = "`n") {
 						
-							TextSendPageEnd(CurrentWord, PasteText, WordStartIndex, StartIndex)
+							TextSendPageEnd(CurrentWord, PasteText, WordStartIndex, StartIndex, Version)
 							
 							CurrentWord := ""
 							CurrentWordPixels := 0
@@ -712,12 +754,11 @@ Loop, Parse, ReadText
 							
 							if (PasteText) {
 								SendInput, %clipboard%
-								Send, {PgDn}
+								PageFlip(Version, PagesTyped)
 								clipboard := ""
 							}
-							else {
-								Send, {PgDn}
-							}
+							else
+								PageFlip(Version, PagesTyped)
 							
 							CurrentWord := CurrentWord . A_LoopField
 							CurrentWordPixels += Width
@@ -764,9 +805,8 @@ Loop, Parse, ReadText
 						if (not PasteText) {
 							Send, {Enter}
 						}
-						else {
+						else
 							clipboard := clipboard . "`n"
-						}
 						
 						CurrentWord := CurrentWord . A_LoopField
 						CurrentWordPixels += Width
@@ -837,7 +877,7 @@ if (not BookEnded) {
 		LinesTyped := 0
 		PagesTyped := 0
 	} else if (NextPageGroup) { ;Enough pages to "flip"
-		Send, {PgDn}
+		PageFlip(Version, PagesTyped)
 		PixelsTyped := 0
 		LinesTyped := 0
 		PagesTyped += 1
