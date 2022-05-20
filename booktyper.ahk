@@ -567,6 +567,27 @@ return
 
 
 
+PageFlip(Version, PagesTyped) { ;Java and Bedrock differ in the keys they use to flip pages
+;As well as this, Bedrock has a hard coded limit of max 244 (?) characters per page
+
+	if (Version = "java") ;Simpler page turn
+		Send, {PgDn}
+	else { ;Bedrock turning
+		SendMode Event ;Sending is more "reliable" this way
+		SetKeyDelay, 20
+		Send, {Esc 1}
+		Send, {Right 1}
+		if (Mod(PagesTyped, 2) = 1) { ;On an even numbered page; "flip" the two pages
+			SendInput, {Enter} ;*************THIS IS REPEATING OVER AND OVER WHEN IT SHOULD BE PRESSED ONCE
+			Send, {Left 2} ;Move to the previous of the next two pages
+		}
+		;MsgBox, %PagesTyped%
+		;Sleep, 5000
+		SendMode Input
+	}
+}
+
+
 #IfWinExist BookTyper - Active
 ^+b::
 
@@ -594,22 +615,7 @@ TextSendBookEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex) {
 }
 
 
-PageFlip(Version, PagesTyped) { ;Java and Bedrock differ in the keys they use to flip pages
-
-	if (Version = "java") ;Simpler page turn
-		Send, {PgDn}
-	else { ;Bedrock turning
-		Send, {Esc}
-		Send, {Right}
-		if (Mod(PagesTyped, 2) = 1) { ;On an even numbered page; "flip" the two pages
-			Send, {Enter}
-			Send, {Left 2} ;Move to the previous of the next two pages
-		}
-	}
-}
-
-
-TextSendPageEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex, Version) {
+TextSendPageEnd(CurrentWord, PasteText, ByRef WordStartIndex, StartIndex, Version, PagesTyped) {
 	if (not PasteText) {
 		Loop, Parse, CurrentWord ;Clear text lines
 		{
@@ -722,7 +728,7 @@ Loop, Parse, ReadText
 					
 					if (CurrentWordPixels = PixelsTyped or (CurrentWordPixels + Width) > MAX_PIXELS_PER_LINE or FillLines) {
 						
-						TextSendPageEnd(CurrentWord, PasteText, WordStartIndex, StartIndex, Version)
+						TextSendPageEnd(CurrentWord, PasteText, WordStartIndex, StartIndex, Version, PagesTyped)
 						
 						if (A_LoopField = " " or A_LoopField = "`n") {
 							
@@ -743,7 +749,7 @@ Loop, Parse, ReadText
 								
 						if (A_LoopField = " " or A_LoopField = "`n") {
 						
-							TextSendPageEnd(CurrentWord, PasteText, WordStartIndex, StartIndex, Version)
+							TextSendPageEnd(CurrentWord, PasteText, WordStartIndex, StartIndex, Version, PagesTyped)
 							
 							CurrentWord := ""
 							CurrentWordPixels := 0
@@ -768,7 +774,6 @@ Loop, Parse, ReadText
 					}
 					
 					PagesTyped++
-					
 				}
 			}
 			else { ;Page unfinished, next line
@@ -927,9 +932,13 @@ return
 ^+n:: ;Clear all pages in a book starting from page 1; useful for testing
 Loop, %MAX_PAGES%
 {
-	Send, ^a
-	Send, {Backspace}
-	Send, {PgDn}
+	if (Version = "bedrock") {
+		Send, {Enter} ;Needed to put the cursor on the page
+		SendEvent, {Ctrl down}a{Ctrl up}
+	}
+	else
+		Send, ^a
+	Send, {Delete}
+	PageFlip(Version, (A_Index - 1))
 }
-;Send, {LControl up}{RControl up}
 return
