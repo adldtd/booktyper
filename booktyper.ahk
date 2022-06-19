@@ -722,6 +722,7 @@ Loop, Parse, ReadText
 					}
 					
 					BookEnded = true ;Resets the current word pixels, pixels typed, and lines typed at the end; doesn't have to do it here
+					StartIndex += 1
 					Break
 				}
 				else { ;Book unfinished, next page
